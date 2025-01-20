@@ -2,7 +2,7 @@ package ru.nsu.lyutaevdronov.map;
 
 import org.jetbrains.annotations.NotNull;
 import ru.nsu.lyutaevdronov.array.PersistentArray;
-import ru.nsu.lyutaevdronov.common.PersistentData;
+import ru.nsu.lyutaevdronov.common.SpecialPersistentData;
 
 import java.util.*;
 
@@ -12,7 +12,7 @@ import java.util.*;
  * @param <K> тип ключей
  * @param <V> тип значений
  */
-public class PersistentAssociativeArray<K, V> extends AbstractMap<K, V> implements PersistentData {
+public class PersistentAssociativeArray<K, V> extends AbstractMap<K, V> implements SpecialPersistentData {
     private static final int TABLE_MAX_SIZE = 16;
     private final List<PersistentArray<Pair<K, V>>> table;
     /**
@@ -26,16 +26,16 @@ public class PersistentAssociativeArray<K, V> extends AbstractMap<K, V> implemen
     /**
      * Стек для хранения вложенных персистентных структур, изменения к которым могут быть отменены
      */
-    private final Deque<PersistentAssociativeArray<?, ?>> insertedUndo = new ArrayDeque<>();
+    private final Deque<SpecialPersistentData> insertedUndoStack = new ArrayDeque<>();
     /**
      * Стек для хранения вложенных персистентных структур, изменения к которым могут быть повторно применены
      */
-    private final Deque<PersistentAssociativeArray<?, ?>> insertedRedo = new ArrayDeque<>();
+    private final Deque<SpecialPersistentData> insertedRedoStack = new ArrayDeque<>();
 
     /**
      * Ссылка на родительский ассоциативный массив, если текущий является частью его вложенности
      */
-    private PersistentAssociativeArray<?, PersistentAssociativeArray<?, ?>> parent;
+    private SpecialPersistentData parent;
     private int countInsertedMaps = 0;
 
     public PersistentAssociativeArray() {
@@ -56,14 +56,14 @@ public class PersistentAssociativeArray<K, V> extends AbstractMap<K, V> implemen
 
     @Override
     public void undo() {
-        if (!insertedUndo.isEmpty()) {
-            if (insertedUndo.peek().isEmpty()) {
-                insertedRedo.push(insertedUndo.pop());
+        if (!insertedUndoStack.isEmpty()) {
+            if (insertedUndoStack.peek().isEmpty()) {
+                insertedRedoStack.push(insertedUndoStack.pop());
                 standardUndo();
             } else {
-                PersistentAssociativeArray<?, ?> persistentAssociativeArray = insertedUndo.pop();
-                persistentAssociativeArray.undo();
-                insertedRedo.push(persistentAssociativeArray);
+                SpecialPersistentData persistentData = insertedUndoStack.pop();
+                persistentData.undo();
+                insertedRedoStack.push(persistentData);
             }
         } else {
             standardUndo();
@@ -72,12 +72,12 @@ public class PersistentAssociativeArray<K, V> extends AbstractMap<K, V> implemen
 
     @Override
     public void redo() {
-        if (!insertedRedo.isEmpty()) {
-            if (insertedRedo.peek().isEmpty()) {
-                if (insertedRedo.peek().parent.size() == countInsertedMaps) {
+        if (!insertedRedoStack.isEmpty()) {
+            if (insertedRedoStack.peek().isEmpty()) {
+                if (insertedRedoStack.peek().getParent().size() == countInsertedMaps) {
                     standardInsertedRedo();
                 } else {
-                    insertedUndo.push(insertedRedo.pop());
+                    insertedUndoStack.push(insertedRedoStack.pop());
                     standardRedo();
                 }
             } else {
@@ -103,22 +103,22 @@ public class PersistentAssociativeArray<K, V> extends AbstractMap<K, V> implemen
     }
 
     private void standardInsertedRedo() {
-        PersistentAssociativeArray<?, ?> persistentAssociativeArray = insertedRedo.pop();
-        persistentAssociativeArray.redo();
-        insertedUndo.push(persistentAssociativeArray);
+        SpecialPersistentData persistentData = insertedRedoStack.pop();
+        persistentData.redo();
+        insertedUndoStack.push(persistentData);
     }
 
     private void tryParentUndo(V value) {
-        if (value instanceof PersistentAssociativeArray persistentAssociativeArray) {
+        if (value instanceof SpecialPersistentData persistentData) {
             countInsertedMaps++;
-            persistentAssociativeArray.parent = this;
-            insertedUndo.push(persistentAssociativeArray);
+            persistentData.addParent(this);
+            insertedUndoStack.push(persistentData);
             redo.clear();
-            insertedRedo.clear();
+            insertedRedoStack.clear();
         }
 
         if (parent != null) {
-            parent.insertedUndo.push(this);
+            parent.addChildModification(this);
         }
     }
 
@@ -225,6 +225,7 @@ public class PersistentAssociativeArray<K, V> extends AbstractMap<K, V> implemen
 
     /**
      * Возвращает значение, которому сопоставлен указанный ключ, или null, если этот ассоциативный массив не содержит сопоставления для ключа.
+     *
      * @param key ключ, ассоциированное значение которого должно быть возвращено
      * @return значение, которому сопоставлен указанный ключ, или null, если этот ассоциативный массив не содержит сопоставления для ключа
      */
@@ -288,6 +289,7 @@ public class PersistentAssociativeArray<K, V> extends AbstractMap<K, V> implemen
 
     /**
      * Возвращает строковое представление этого ассоциативного массива.
+     *
      * @return строковое представление этого ассоциативного массива
      */
     @Override
@@ -307,6 +309,21 @@ public class PersistentAssociativeArray<K, V> extends AbstractMap<K, V> implemen
 
     private int calculateIndex(int hashcode) {
         return hashcode & (TABLE_MAX_SIZE - 1);
+    }
+
+    @Override
+    public void addChildModification(SpecialPersistentData obj) {
+        insertedUndoStack.push(obj);
+    }
+
+    @Override
+    public void addParent(SpecialPersistentData obj) {
+        this.parent = obj;
+    }
+
+    @Override
+    public SpecialPersistentData getParent() {
+        return parent;
     }
 
     /**
@@ -354,6 +371,7 @@ public class PersistentAssociativeArray<K, V> extends AbstractMap<K, V> implemen
 
         /**
          * Возвращает строковое представление этой записи ассоциативного массива.
+         *
          * @return строковое представление этой записи ассоциативного массива
          */
         @Override

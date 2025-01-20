@@ -5,6 +5,7 @@ import org.jetbrains.annotations.NotNull;
 import ru.nsu.lyutaevdronov.common.AbstractPersistentData;
 import ru.nsu.lyutaevdronov.common.BTreeNode;
 import ru.nsu.lyutaevdronov.common.Pair;
+import ru.nsu.lyutaevdronov.common.SpecialPersistentData;
 
 import java.util.*;
 
@@ -24,18 +25,18 @@ public class PersistentArray<E> extends AbstractPersistentData implements List<E
      * Стек для хранения вложенных состояний, которые были добавлены в текущий массив. Этот
      * стек используется для реализации операции undo, чтобы можно было отменить вложенные операции
      */
-    private final Deque<PersistentArray<?>> insertedUndoStack = new ArrayDeque<>();
+    private final Deque<SpecialPersistentData> insertedUndoStack = new ArrayDeque<>();
     /**
      * Стек для хранения вложенных состояний, которые были удалены из стека insertedUndo.
      * Этот стек используется для реализации операции redo, чтобы можно было
      * повторно применить операции для вложенных состояний
      */
-    private final Deque<PersistentArray<?>> insertedRedoStack = new ArrayDeque<>();
+    private final Deque<SpecialPersistentData> insertedRedoStack = new ArrayDeque<>();
 
     /**
      * Ссылка на родительский массив, если текущий массив является часть его вложенности
      */
-    private PersistentArray<PersistentArray<?>> parent;
+    private SpecialPersistentData parent;
 
     public PersistentArray() {
         this(6, 5);
@@ -83,11 +84,11 @@ public class PersistentArray<E> extends AbstractPersistentData implements List<E
     }
 
     private void tryParentUndo(E value) {
-        if (value instanceof PersistentArray persistentArray) {
-            persistentArray.parent = this;
+        if (value instanceof SpecialPersistentData persistentData) {
+            persistentData.addParent(this);
         }
         if (parent != null) {
-            parent.insertedUndoStack.push(this);
+            parent.addChildModification(this);
         }
     }
 
@@ -99,6 +100,22 @@ public class PersistentArray<E> extends AbstractPersistentData implements List<E
     @Override
     public int size() {
         return size(getCurrentHead());
+    }
+
+
+    @Override
+    public void addChildModification(SpecialPersistentData obj) {
+        insertedUndoStack.push(obj);
+    }
+
+    @Override
+    public void addParent(SpecialPersistentData obj) {
+        this.parent = obj;
+    }
+
+    @Override
+    public SpecialPersistentData getParent() {
+        return parent;
     }
 
     private int size(HeadArray<E> head) {
@@ -452,6 +469,7 @@ public class PersistentArray<E> extends AbstractPersistentData implements List<E
 
         return node;
     }
+
     /**
      * Возвращает строковое представление содержимого массива.
      * <p>

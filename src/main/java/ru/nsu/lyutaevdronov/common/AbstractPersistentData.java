@@ -3,7 +3,7 @@ package ru.nsu.lyutaevdronov.common;
 /**
  * Описывает класс абстрактной persisntent структура, которая поддерживает undo redo
  */
-public abstract class AbstractPersistentData implements PersistentData {
+public abstract class AbstractPersistentData implements SpecialPersistentData {
     /**
      * Глубина структуры данных.
      */

@@ -10,13 +10,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 final class CommonTest {
     @Test
-    @DisplayName("Тест на добавление и удаление элементов")
-    void testAddAndGet() {
+    @DisplayName("Тест на добавление и удаление элементов, undo/redo для разнородных вложенных персистентных структур")
+    void testInsertedPersistentStructure() {
         PersistentArray<PersistentData> persistentArray = new PersistentArray<>(32);
 
-        PersistentArray<String> array = new PersistentArray<>(32);
+        PersistentArray<String> array = new PersistentArray<>();
         PersistentAssociativeArray<String, Integer> map = new PersistentAssociativeArray<>();
-
         persistentArray.add(array);
         persistentArray.add(map);
 
@@ -28,7 +27,27 @@ final class CommonTest {
 
         assertThat(array.get(0)).isEqualTo("Cat");
         assertThat(array.get(1)).isEqualTo("Dog");
+        assertThat(map)
+                .containsEntry("A", 1)
+                .containsEntry("B", 2)
+                .containsEntry("C", 3);
 
+        persistentArray.undo();
+        persistentArray.undo();
+
+
+        assertThat(array.get(0)).isEqualTo("Cat");
+        assertThat(array.get(1)).isEqualTo("Dog");
+        assertThat(map)
+                .containsEntry("A", 1)
+                .doesNotContainEntry("B", 2)
+                .doesNotContainEntry("C", 3);
+
+        persistentArray.redo();
+        persistentArray.redo();
+
+        assertThat(array.get(0)).isEqualTo("Cat");
+        assertThat(array.get(1)).isEqualTo("Dog");
         assertThat(map)
                 .containsEntry("A", 1)
                 .containsEntry("B", 2)
